@@ -1,0 +1,230 @@
+{% extends 'scanner_app/base.html' %}
+{% load static %}
+
+{% block title %}Scan Results - GitLab Security Scanner{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <!-- Back button -->
+            <a href="{% url 'index' %}" class="btn btn-outline-primary mb-3">
+                <i class="fas fa-arrow-left"></i> New Scan
+            </a>
+
+            <!-- Scan Summary -->
+            <div class="card shadow mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0"><i class="fas fa-chart-line"></i> Scan Summary</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3 mb-3">
+                            <div class="border rounded p-3">
+                                <h6 class="text-muted">Scan Type</h6>
+                                <p class="h4 mb-0">{{ scan.input_type|title }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="border rounded p-3">
+                                <h6 class="text-muted">Target</h6>
+                                <p class="h4 mb-0">{{ scan.input_name }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="border rounded p-3">
+                                <h6 class="text-muted">Scan Time</h6>
+                                <p class="h6 mb-0">{{ scan.scan_time|date:"Y-m-d H:i:s" }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="border rounded p-3">
+                                <h6 class="text-muted">Total Repos</h6>
+                                <p class="h4 mb-0">{{ scan.total_repos }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="alert alert-danger text-center">
+                                <h5>High Risk Issues</h5>
+                                <h2 class="mb-0">{{ scan.high_risk_count }}</h2>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="alert alert-warning text-center">
+                                <h5>Medium Risk Issues</h5>
+                                <h2 class="mb-0">{{ scan.medium_risk_count }}</h2>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="alert alert-info text-center">
+                                <h5>Low Risk Issues</h5>
+                                <h2 class="mb-0">{{ scan.low_risk_count }}</h2>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Export buttons -->
+                    <div class="text-center mt-3">
+                        <button class="btn btn-success" id="exportPdfBtn" data-scan-id="{{ scan.id }}">
+                            <i class="fas fa-file-pdf"></i> Export as PDF
+                        </button>
+                        <button class="btn btn-info" id="exportJsonBtn" data-scan-id="{{ scan.id }}">
+                            <i class="fas fa-code"></i> Export as JSON
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Repositories List -->
+            <div class="card shadow">
+                <div class="card-header bg-dark text-white">
+                    <h4 class="mb-0"><i class="fas fa-database"></i> Repositories with Issues</h4>
+                </div>
+                <div class="card-body p-0">
+                    {% if repositories %}
+                        {% for repo in repositories %}
+                            <div class="card m-3 border border-danger">
+                                <div class="card-header bg-light">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h5 class="mb-0">
+                                                <i class="fas fa-folder-open"></i>
+                                                <strong>{{ repo.repo_name }}</strong>
+                                            </h5>
+                                            <small class="text-muted">
+                                                <a href="{{ repo.repo_url }}" target="_blank">
+                                                    <i class="fas fa-external-link-alt"></i> View on GitLab
+                                                </a>
+                                            </small>
+                                        </div>
+                                        <div>
+                                            <span class="badge bg-danger">High: {{ repo.high_count }}</span>
+                                            <span class="badge bg-warning">Medium: {{ repo.medium_count }}</span>
+                                            <span class="badge bg-info">Low: {{ repo.low_count }}</span>
+                                            <span class="badge bg-secondary">Total: {{ repo.issues_found|length }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover mb-0">
+                                            <thead class="table-secondary">
+                                                <tr>
+                                                    <th style="width: 5%">#</th>
+                                                    <th style="width: 70%">Sensitive File Found</th>
+                                                    <th style="width: 25%">Severity</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                    {% for issue in repo.issues_found %}
+                                                    <tr>
+                                                        <td>{{ forloop.counter }}</td>
+                                                        <td>
+                                                            <div class="issue-description">
+                                                                {% if issue.description %}
+                                                                    <i class="fas fa-exclamation-triangle text-danger"></i>
+                                                                    {{ issue.description }}
+                                                                {% else %}
+                                                                    <i class="fas fa-file-code text-danger"></i>
+                                                                    Sensitive data found in file: {{ issue.file }}
+                                                                {% endif %}
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            {% if issue.severity == "High" or issue.severity == "Critical" %}
+                                                                <span class="badge bg-danger">High</span>
+                                                            {% elif issue.severity == "Medium" %}
+                                                                <span class="badge bg-warning">Medium</span>
+                                                            {% else %}
+                                                                <span class="badge bg-info">Low</span>
+                                                            {% endif %}
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="alert alert-success m-3">
+                            <i class="fas fa-check-circle"></i>
+                            No issues found! All repositories are clean.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            {% if page_obj.has_other_pages %}
+                <div class="mt-3">
+                    <nav>
+                        <ul class="pagination justify-content-center">
+                            {% if page_obj.has_previous %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                                </li>
+                            {% endif %}
+
+                            {% for num in page_obj.paginator.page_range %}
+                                {% if page_obj.number == num %}
+                                    <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                    <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if page_obj.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .issue-description {
+        font-size: 0.9rem;
+        word-break: break-word;
+    }
+
+    .card {
+        transition: transform 0.2s;
+    }
+
+    .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .table td {
+        vertical-align: middle;
+    }
+
+    .badge {
+        font-size: 0.8rem;
+        margin: 2px;
+    }
+</style>
+
+<script>
+    document.getElementById('exportPdfBtn')?.addEventListener('click', function() {
+        window.location.href = '/export/pdf/{{ scan.id }}/';
+    });
+
+    document.getElementById('exportJsonBtn')?.addEventListener('click', function() {
+        window.location.href = '/export/json/{{ scan.id }}/';
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,152 @@
+{% extends 'scanner_app/base.html' %}
+{% load static %}
+
+{% block title %}Home - GitLab Security Scanner{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <!-- Welcome Section -->
+            <div class="text-center mb-4">
+                <h1 class="display-4">
+                    <i class="fas fa-shield-alt text-primary"></i> GitLab Security Scanner
+                </h1>
+                <p class="lead">Identify security risks and exposed secrets in public GitLab repositories</p>
+            </div>
+
+            <!-- Scanner Card -->
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0"><i class="fas fa-search"></i> Repository Security Scanner</h3>
+                </div>
+                <div class="card-body">
+                    <form id="scanForm">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Scan Type</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="input_type" id="userRadio" value="user" checked>
+                                <label class="form-check-label" for="userRadio">
+                                    <i class="fas fa-user"></i> User - Scan all public repositories of a specific user
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="input_type" id="groupRadio" value="group">
+                                <label class="form-check-label" for="groupRadio">
+                                    <i class="fas fa-users"></i> Group - Scan all public repositories in a group
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="inputName" class="form-label fw-bold">
+                                <i class="fas fa-tag"></i> Username or Group Name
+                            </label>
+                            <input type="text" class="form-control form-control-lg" id="inputName"
+                                   required placeholder="e.g., gitlab-org, root, facebook"
+                                   autocomplete="off">
+                            <small class="form-text text-muted">
+                                Enter a GitLab username (e.g., 'root') or group name (e.g., 'gitlab-org')
+                            </small>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="gitlabToken" class="form-label fw-bold">
+                                <i class="fas fa-key"></i> GitLab Personal Access Token
+                                <span class="badge bg-secondary">Optional</span>
+                            </label>
+                            <input type="password" class="form-control" id="gitlabToken"
+                                   placeholder="Enter your GitLab personal access token for higher rate limits">
+                            <small class="form-text text-muted">
+                                <i class="fas fa-info-circle"></i>
+                                Providing a token allows up to 2000 requests per hour (vs 60 without token)
+                            </small>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100" id="scanBtn">
+                            <i class="fas fa-rocket"></i> Start Scan
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Loading Indicator -->
+            <div id="loadingIndicator" class="text-center mt-4" style="display: none;">
+                <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 fw-bold">Scanning repositories...</p>
+                <p class="text-muted">This may take a few moments depending on the number of repositories</p>
+            </div>
+
+            <!-- Recent Scans -->
+            {% if recent_scans %}
+            <div class="card mt-4 shadow">
+                <div class="card-header bg-info text-white">
+                    <h4 class="mb-0"><i class="fas fa-clock"></i> Recent Scans</h4>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        {% for scan in recent_scans %}
+                        <a href="{% url 'results' scan.id %}" class="list-group-item list-group-item-action">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>
+                                        <i class="fas fa-{{ scan.input_type }}"></i>
+                                        {{ scan.input_type|title }}: {{ scan.input_name }}
+                                    </strong>
+                                    <br>
+                                    <small class="text-muted">
+                                        <i class="fas fa-calendar"></i> {{ scan.scan_time|date:"Y-m-d H:i:s" }}
+                                    </small>
+                                </div>
+                                <div>
+                                    <span class="badge bg-danger">High: {{ scan.high_risk_count }}</span>
+                                    <span class="badge bg-warning">Medium: {{ scan.medium_risk_count }}</span>
+                                    <span class="badge bg-info">Low: {{ scan.low_risk_count }}</span>
+                                    <span class="badge bg-secondary">Repos: {{ scan.total_repos }}</span>
+                                </div>
+                                <i class="fas fa-chevron-right text-muted"></i>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Features Section -->
+            <div class="row mt-4 g-3">
+                <div class="col-md-4">
+                    <div class="card h-100 text-center">
+                        <div class="card-body">
+                            <i class="fas fa-file-alt fa-2x text-danger mb-2"></i>
+                            <h5>Sensitive Files</h5>
+                            <p class="small">Detects .env, .pem, id_rsa, config.json, and other sensitive files</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100 text-center">
+                        <div class="card-body">
+                            <i class="fas fa-key fa-2x text-warning mb-2"></i>
+                            <h5>Exposed Secrets</h5>
+                            <p class="small">Finds API keys, passwords, tokens, and cloud credentials</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100 text-center">
+                        <div class="card-body">
+                            <i class="fas fa-tasks fa-2x text-info mb-2"></i>
+                            <h5>Missing Metadata</h5>
+                            <p class="small">Checks for README.md, LICENSE, and repository description</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

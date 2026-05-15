@@ -1,0 +1,126 @@
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  DOCKER_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  DOCKER_DRIVER: overlay2
+
+# Cache dependencies
+cache:
+  paths:
+    - /root/.cache/pip
+
+# Test stage
+test:
+  stage: test
+  image: python:3.11-slim
+  services:
+    - postgres:15
+  variables:
+    POSTGRES_DB: gitlab_scanner_test
+    POSTGRES_USER: test_user
+    POSTGRES_PASSWORD: test_password
+    DATABASE_URL: postgresql://test_user:test_password@postgres:5432/gitlab_scanner_test
+  before_script:
+    - apt-get update && apt-get install -y gcc libpq-dev
+    - pip install -r requirements.txt
+    - pip install pytest pytest-django pytest-cov
+  script:
+    # Run Django checks
+    - python manage.py check
+
+    # Run migrations
+    - python manage.py migrate
+
+    # Run tests with coverage
+    - coverage run manage.py test scanner_app
+    - coverage report
+
+    # Check coverage threshold
+    - coverage report --fail-under=70
+  after_script:
+    - coverage html
+    - coverage xml
+  artifacts:
+    paths:
+      - htmlcov/
+      - coverage.xml
+    expire_in: 7 days
+  only:
+    - main
+    - develop
+    - merge_requests
+
+# Security scan stage
+security_scan:
+  stage: test
+  image: python:3.11-slim
+  before_script:
+    - pip install bandit safety
+  script:
+    # Run bandit security linter
+    - bandit -r scanner_app/ -f json -o bandit-report.json
+    - bandit -r scanner_app/ --severity-level high
+
+    # Check dependencies for vulnerabilities
+    - safety check
+  artifacts:
+    paths:
+      - bandit-report.json
+    expire_in: 7 days
+  allow_failure: true
+
+# Build Docker image
+build:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    # Build Docker image
+    - docker build -t $DOCKER_IMAGE .
+    - docker tag $DOCKER_IMAGE $CI_REGISTRY_IMAGE:latest
+
+    # Push to registry
+    - docker push $DOCKER_IMAGE
+    - docker push $CI_REGISTRY_IMAGE:latest
+  only:
+    - main
+
+# Deploy to production
+deploy:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add - > /dev/null
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+  script:
+    # Deploy to production server
+    - ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST "
+        cd /app/gitlab-scanner &&
+        docker-compose pull &&
+        docker-compose up -d --force-recreate &&
+        docker system prune -f
+      "
+  only:
+    - main
+  when: manual
+
+# Scheduled scan job (automated weekly scans)
+scheduled_scan:
+  stage: test
+  image: python:3.11-slim
+  script:
+    - pip install -r requirements.txt
+    - python manage.py scheduled_scan
+  only:
+    - schedules
+  variables:
+    SCHEDULED_SCAN: "true"

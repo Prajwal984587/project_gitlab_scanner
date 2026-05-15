@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: gitlab-scanner-web
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=0
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-django-insecure-production-key-change-this}
+      - DATABASE_URL=sqlite:///db.sqlite3
+    volumes:
+      - ./db.sqlite3:/app/db.sqlite3
+      - ./media:/app/media
+      - ./staticfiles:/app/staticfiles
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Use PostgreSQL for production
+  db:
+    image: postgres:15
+    container_name: gitlab-scanner-db
+    environment:
+      - POSTGRES_DB=gitlab_scanner
+      - POSTGRES_USER=scanner_user
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-secure_password_change_me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
